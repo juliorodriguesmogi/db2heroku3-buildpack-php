@@ -1,0 +1,21 @@
+<<<<<<< HEAD
+#!/usr/bin/env bash
+# bin/release <build-dir>
+
+cat <<EOF
+---
+default_process_types:
+  web: sh boot.sh
+EOF
+
+=======
+#!/usr/bin/env bash
+# bin/release <build-dir>
+
+cat <<EOF
+---
+default_process_types:
+  web: sh boot.sh
+EOF
+
+>>>>>>> c94e83ee554d65696622d0299302610086a7d0db

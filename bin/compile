@@ -1,0 +1,343 @@
+<<<<<<< HEAD
+#!/usr/bin/env bash
+# bin/compile <build-dir> <cache-dir>
+
+# fail fast
+set -e
+
+# Heroku Revision.
+#
+# Affixed to all vendored binary output to represent changes to the
+# compilation environment without a change to the upstream version,
+# e.g. PHP 5.3.27 without, and then subsequently with, libmcrypt.
+heroku_rev='-2'
+
+# config
+MCRYPT_VERSION="2.5.8"
+APACHE_VERSION="2.2.25"
+APACHE_PATH="apache"
+PHP_VERSION="5.3.27"
+PHP_PATH="php"
+
+BIN_DIR=$(dirname $0)
+BUILD_DIR=$1
+CACHE_DIR=$2
+LP_DIR=`cd $(dirname $0); cd ..; pwd`
+
+function download_and_install_ibm_db() {
+  CLI_URL="https://public.dhe.ibm.com/ibmdl/export/pub/software/data/db2/drivers/odbc_cli/linuxx64_odbc_cli.tar.gz"
+
+  echo "Downloading IBM Data Server Driver...."
+  curl -LO "$CLI_URL"
+
+  # Extracting and Cleaning DS Driver
+  rm -rf clidriver
+  tar -xzf linuxx64_odbc_cli.tar.gz
+
+  echo "Downloading autoconf..."
+  curl -LO http://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz
+
+  echo "Downloading m4..."
+  curl -LO http://ftp.gnu.org/pub/gnu/m4/m4-1.4.13.tar.gz
+
+  # Extracting m4 and autoconf
+  tar -xzf autoconf-2.69.tar.gz
+  tar -xzf m4-1.4.13.tar.gz
+
+  echo "Installing m4 and autoconf ..."
+  cd m4-1.4.13
+  ./configure --prefix=$BUILD_DIR/m4
+  make
+  make install
+  export PATH=$BUILD_DIR/m4/bin:$PATH
+
+  cd $BUILD_DIR/autoconf-2.69
+  ./configure --prefix=$BUILD_DIR/autoconf
+  make
+  make install
+
+  cd $BUILD_DIR
+  #Cleaning clidriver, m4 and autoconf
+  rm -rf linuxx64_odbc_cli.tar.gz
+  rm -rf m4-1.4.13.tar.gz
+  rm -rf m4-1.4.13
+  rm -rf autoconf-2.69.tar.gz
+  rm -rf autoconf-2.69
+
+  ln -s $BUILD_DIR/php /app/php
+  ln -s $BUILD_DIR/vendor /app/vendor
+
+  export PATH=$BUILD_DIR/autoconf/bin:/app/php/bin:$PATH
+  export IBM_DB_HOME=$BUILD_DIR/clidriver
+  export LD_LIBRARY_PATH=/app/vendor/mcrypt/lib:$LD_LIBRARY_PATH
+  export PHP_AUTOCONF=$BUILD_DIR/autoconf/bin/autoconf
+  export PHP_AUTOHEADER=$BUILD_DIR/autoconf/bin/autoheader
+
+  echo "Installing ibm_db2 ..."
+  pecl install ibm_db2
+}
+  
+# include .files when moving things around
+shopt -s dotglob
+
+cd $BUILD_DIR
+
+# move app things to www
+mkdir -p $CACHE_DIR/www
+mv * $CACHE_DIR/www
+mv $CACHE_DIR/www .
+
+# keep Procfile
+if [ -f www/Procfile ]; then
+  mv www/Procfile .
+fi
+
+MCRYPT_URL="https://heroku-buildpack-php.s3.amazonaws.com/mcrypt-""$MCRYPT_VERSION""$heroku_rev"".tar.gz"
+echo "-----> Bundling mcrypt version $MCRYPT_VERSION"
+curl --silent --max-time 60 --location "$MCRYPT_URL" | tar xz
+
+APACHE_URL="https://heroku-buildpack-php.s3.amazonaws.com/apache-""$APACHE_VERSION""$heroku_rev"".tar.gz"
+echo "-----> Bundling Apache version $APACHE_VERSION"
+curl --silent --max-time 60 --location "$APACHE_URL" | tar xz
+
+PHP_URL="https://heroku-buildpack-php.s3.amazonaws.com/php-$PHP_VERSION""$heroku_rev"".tar.gz"
+cp $LP_DIR/php.tar.gz .
+tar -xzf php.tar.gz
+
+mv $PHP_PATH/libphp5.so $APACHE_PATH/modules
+
+# update config files
+cp $LP_DIR/conf/httpd.conf $APACHE_PATH/conf
+cp $LP_DIR/conf/php.ini php
+cp $LP_DIR/conf/php.ini php/lib
+
+# Restore old artifacts from the cache.
+CACHED_DIRS="ibmdb2"
+for dir in $CACHED_DIRS; do
+  cp -R $CACHE_DIR/$dir/* . &> /dev/null || true
+done
+
+if [ -f clidriver/lib/libdb2.so ]; then
+  # we have from cache, just restore php's db2.so
+  echo "-------> restoring ibm_db2 from cache"
+  mv ibm_db2.so php/lib/php/extensions/no-debug-non-zts-20121212/
+  echo "-------> restored ibm_db2"
+else
+  echo "-------> downloading and installing ibm_db2"
+  download_and_install_ibm_db
+  echo "-------> caching ibm_db2 and dependencies"
+  for dir in $CACHED_DIRS; do
+    mkdir -p $CACHE_DIR/$dir
+    cp -R clidriver $CACHE_DIR/$dir &> /dev/null || true
+    cp php/lib/php/extensions/no-debug-non-zts-20121212/ibm_db2.so $CACHE_DIR/$dir &> /dev/null || true
+    echo "-------> caching ibm_db2 done"
+  done
+fi
+
+
+
+# make php available on bin
+mkdir -p bin
+ln -s /app/php/bin/php bin/php
+
+cat >>boot.sh <<EOF
+for var in \`env|cut -f1 -d=\`; do
+  echo "PassEnv \$var" >> /app/apache/conf/httpd.conf;
+done
+touch /app/apache/logs/error_log
+touch /app/apache/logs/access_log
+tail -F /app/apache/logs/error_log &
+tail -F /app/apache/logs/access_log &
+export LD_LIBRARY_PATH=/app/php/lib/php:/app/clidriver/lib
+export PHP_INI_SCAN_DIR=/app/www
+echo "Launching apache"
+exec /app/apache/bin/httpd -DNO_DETACH
+EOF
+
+chmod +x boot.sh
+
+# clean the cache
+#rm -rf $CACHE_DIR
+=======
+#!/usr/bin/env bash
+# bin/compile <build-dir> <cache-dir>
+
+# fail fast
+set -e
+
+# Heroku Revision.
+#
+# Affixed to all vendored binary output to represent changes to the
+# compilation environment without a change to the upstream version,
+# e.g. PHP 5.3.27 without, and then subsequently with, libmcrypt.
+heroku_rev='-2'
+
+# config
+MCRYPT_VERSION="2.5.8"
+APACHE_VERSION="2.2.25"
+APACHE_PATH="apache"
+PHP_VERSION="5.6.27"
+PHP_PATH="php-5.6.27"
+
+BIN_DIR=$(dirname $0)
+
+BUILD_DIR=$1
+CACHE_DIR=$2
+LP_DIR=`cd $(dirname $0); cd ..; pwd`
+
+function download_and_install_ibm_db() {
+  CLI_URL="https://public.dhe.ibm.com/ibmdl/export/pub/software/data/db2/drivers/odbc_cli/linuxx64_odbc_cli.tar.gz"
+
+  echo "Downloading IBM Data Server Driver...."
+  curl -LO "$CLI_URL"
+
+  # Extracting and Cleaning DS Driver
+  rm -rf clidriver
+  tar -xzf linuxx64_odbc_cli.tar.gz
+
+  echo "Downloading autoconf..."
+  curl -LO http://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz
+
+  echo "Downloading m4..."
+  curl -LO http://ftp.gnu.org/pub/gnu/m4/m4-1.4.13.tar.gz
+
+  # Extracting m4 and autoconf
+  tar -xzf autoconf-2.69.tar.gz
+  tar -xzf m4-1.4.13.tar.gz
+ 
+  apt-get install libcurl3-openssl-dev 
+    
+  echo "Installing m4 and autoconf ..."
+  cd m4-1.4.13
+  ./configure --prefix=$BUILD_DIR/m4
+  make
+  make install
+  export PATH=$BUILD_DIR/m4/bin:$PATH
+
+  cd $BUILD_DIR/autoconf-2.69
+  ./configure --prefix=$BUILD_DIR/autoconf 
+  make
+  make install
+
+  cd $BUILD_DIR
+  #Cleaning clidriver, m4 and autoconf
+  rm -rf linuxx64_odbc_cli.tar.gz
+  rm -rf m4-1.4.13.tar.gz
+  rm -rf m4-1.4.13
+  rm -rf autoconf-2.69.tar.gz
+  rm -rf autoconf-2.69
+
+  ln -s $BUILD_DIR/php /app/php-5.6.27
+  ln -s $BUILD_DIR/vendor /app/vendor
+
+  export PATH=$BUILD_DIR/autoconf/bin:/app/php/bin:$PATH
+  export IBM_DB_HOME=$BUILD_DIR/clidriver
+  export LD_LIBRARY_PATH=/app/vendor/mcrypt/lib:$LD_LIBRARY_PATH
+  export PHP_AUTOCONF=$BUILD_DIR/autoconf/bin/autoconf
+  export PHP_AUTOHEADER=$BUILD_DIR/autoconf/bin/autoheader
+
+  echo "Installing ibm_db2 ..."
+  pecl install ibm_db2
+  
+}
+  
+# include .files when moving things around
+shopt -s dotglob
+
+cd $BUILD_DIR
+
+# move app things to www
+mkdir -p $CACHE_DIR/www
+mv * $CACHE_DIR/www
+mv $CACHE_DIR/www .
+
+# keep Procfile
+if [ -f www/Procfile ]; then
+  mv www/Procfile .
+fi
+
+MCRYPT_URL="https://heroku-buildpack-php.s3.amazonaws.com/mcrypt-""$MCRYPT_VERSION""$heroku_rev"".tar.gz"
+echo "-----> Bundling mcrypt version $MCRYPT_VERSION"
+curl --silent --max-time 60 --location "$MCRYPT_URL" | tar xz
+
+#APACHE_URL="https://heroku-buildpack-php.s3.amazonaws.com/apache-""$APACHE_VERSION""$heroku_rev"".tar.gz"
+#echo "-----> Bundling Apache version $APACHE_VERSION"
+#curl --silent --max-time 60 --location "$APACHE_URL" 
+cp $LP_DIR/apache.tar.gz .
+tar -xzf apache.tar.gz
+
+
+#PHP_URL="https://heroku-buildpack-php.s3.amazonaws.com/php-$PHP_VERSION""$heroku_rev"".tar.gz"
+cp $LP_DIR/php.tar.gz .
+tar -xzf php.tar.gz
+echo "-----> Moving libphp5 ..."
+echo $PHP_PATH
+mv $PHP_PATH/.libs/libphp5.so $APACHE_PATH/modules
+
+# update config files
+mkdir php
+mkdir php/lib
+echo "-----> Updating files ... apache/conf"
+cp $LP_DIR/conf/httpd.conf $APACHE_PATH/conf
+echo "-----> Updating files ... php"
+cp $LP_DIR/conf/php.ini php
+echo "-----> Updating files ... php/lib"
+cp $LP_DIR/conf/php.ini php/lib
+
+# Restore old artifacts from the cache.
+CACHED_DIRS="ibmdb2"
+for dir in $CACHED_DIRS; do
+  cp -R $CACHE_DIR/$dir/* . &> /dev/null || true
+done
+
+if [ -f clidriver/lib/libdb2.so ]; then
+  # we have from cache, just restore php's db2.so
+  echo "-------> restoring ibm_db2 from cache"
+  # mv ibm_db2.so php/lib/php/extensions/no-debug-non-zts-20121212/
+   #mv ibm_db2.so $PHP_PATH/modules
+   cp ibm_db2.so ext
+   #cp oauth.so ext
+   
+  #mv oauth.so php/lib/php/extensions/no-debug-non-zts-20121212/
+  #mv curl.so php/lib/php/extensions/no-debug-non-zts-20121212/
+  echo "-------> restored ibm_db2"
+  
+else
+  echo "-------> downloading and installing ibm_db2"
+  download_and_install_ibm_db
+  echo "-------> caching ibm_db2 and dependencies"
+  for dir in $CACHED_DIRS; do
+    mkdir -p $CACHE_DIR/$dir
+	echo "----> copying php/lib files" 
+    cp -R clidriver $CACHE_DIR/$dir &> /dev/null || true
+    cp php/lib/php/extensions/no-debug-non-zts-20121212/ibm_db2.so $CACHE_DIR/$dir &> /dev/null || true
+	cp php/lib/php/extensions/no-debug-non-zts-20121212/oauth.so $CACHE_DIR/$dir &> /dev/null || true
+	cp php/lib/php/extensions/no-debug-non-zts-20121212/curl.so $CACHE_DIR/$dir &> /dev/null || true
+    echo "-------> caching ibm_db2 done"
+  done
+fi
+
+
+# make php available on bin
+mkdir -p bin
+ln -s /app/php/bin/php bin/php
+
+cat >>boot.sh <<EOF
+for var in \`env|cut -f1 -d=\`; do
+  echo "PassEnv \$var" >> /app/apache/conf/httpd.conf;
+done
+touch /app/apache/logs/error_log
+touch /app/apache/logs/access_log
+tail -F /app/apache/logs/error_log &
+tail -F /app/apache/logs/access_log &
+export LD_LIBRARY_PATH=/app/php/lib/php:/app/clidriver/lib
+export PHP_INI_SCAN_DIR=/app/www
+echo "Launching apache"
+exec /app/apache/bin/httpd -DNO_DETACH
+EOF
+
+chmod +x boot.sh
+
+# clean the cache
+#rm -rf $CACHE_DIR
+>>>>>>> c94e83ee554d65696622d0299302610086a7d0db

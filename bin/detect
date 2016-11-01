@@ -1,0 +1,19 @@
+<<<<<<< HEAD
+#!/usr/bin/env bash
+
+if [ -f $1/index.php ]; then
+  echo "PHP" && exit 0
+else
+  echo "no" && exit 1
+fi
+
+=======
+#!/usr/bin/env bash
+
+if [ -f $1/index.php ]; then
+  echo "PHP" && exit 0
+else
+  echo "no" && exit 1
+fi
+
+>>>>>>> c94e83ee554d65696622d0299302610086a7d0db
